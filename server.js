@@ -17,6 +17,8 @@ var HTTP_PORT = process.env.PORT || 8080;
 
 var express = require("express");
 var exphbs = require("express-handlebars");
+var dataServiceAuth = require("./data-service-auth.js");
+var clientSessions = require("client-sessions");
 var app = express();
 var path = require("path")
 var multer = require("multer")
@@ -26,6 +28,32 @@ var fs = require("fs")
 
 // setup http server to listen on HTTP_PORT 
 app.use(express.static('public'));
+//assignement 6
+
+app.use(
+    clientSessions({
+        cookieName: "session", 
+        secret: "assignment 6", 
+        duration: 2 * 60 * 1000, 
+        activeDuration: 1000 * 60 
+    })
+);
+
+app.use(function(req,res,next){
+    res.locals.session = req.session;
+    next();
+});
+
+
+function ensureLogin(req, res, next) {
+    if (!req.session.user) {
+        res.redirect("/login");
+    } else {
+        next();
+    }
+}
+
+
 
 //assignment 4
 
@@ -82,8 +110,39 @@ app.get("/about",(req,res)=>{
 }
 );
 
+app.get("/login",(req,res)=>{
+    res.render("login");
+}
+);
 
-app.get("/employees/add",(req,res)=>{
+app.get("/register",(req,res)=>{
+    res.render("register");
+}
+);
+
+/*GET /logout
+• This "GET" route will simply "reset" the session (Hint: refer to the Week 10 notes) and redirect the user to
+the "/" route, ie: res.redirect('/');
+*/
+app.get("/logout",(req,res)=>{
+    req.session.reset();
+    res.redirect("/");
+}
+);
+
+// GET /userHistory
+// • This "GET" route simply renders the "userHistory" view without any data (See userHistory.hbs under “Adding
+// New Routes” below). IMPORTANT NOTE: This route (like the 14 others above) must also be protected by your
+// custom ensureLogin helper middleware.
+
+app.get("/userHistory",ensureLogin,(req,res)=>{
+    res.render("userHistory");
+}
+);
+
+
+
+app.get("/employees/add",ensureLogin,(req,res)=>{
     dataService.getDepartments()
     .then((data)=>{
         res.render("addEmployee",{departments:data});
@@ -93,20 +152,20 @@ app.get("/employees/add",(req,res)=>{
     })
 }
 );
-app.get("/images/add",(req,res)=>{
+app.get("/images/add",ensureLogin,(req,res)=>{
     res.render("addImage");
 }
 );
 
 
-app.get("/departments/add",(req,res)=>{
+app.get("/departments/add",ensureLogin,(req,res)=>{
     res.render("addDepartment");
 }
 );
 
 
 
-app.get("/employees", (req,res)=>{
+app.get("/employees",ensureLogin, (req,res)=>{
     if(req.query.status){
         dataService.getEmployeesByStatus(req.query.status).then((data)=>{
             if(data.length>0){
@@ -155,7 +214,7 @@ app.get("/employees", (req,res)=>{
 
 
 
-app.get("/departments", (req,res)=>{
+app.get("/departments", ensureLogin,(req,res)=>{
     dataService.getDepartments().then((data)=>{
         if(data.length>0){
             res.render("departments",{departments:data});
@@ -170,7 +229,7 @@ app.get("/departments", (req,res)=>{
 
 
 
-app.get("/department/:departmentId", (req,res)=>{
+app.get("/department/:departmentId",ensureLogin, (req,res)=>{
     dataService.getDepartmentById(req.params.departmentId).then((data)=>{
         if(data){
             res.render("department",{department:data});
@@ -198,7 +257,7 @@ app.get("/department/:departmentId", (req,res)=>{
 //     });
 // });
 
-app.get("/employee/:empNum", (req, res) => {
+app.get("/employee/:empNum", ensureLogin,(req, res) => {
     // initialize an empty object to store the values
     let viewData = {};
     dataService.getEmployeeByNum(req.params.empNum).then((data) => {
@@ -235,7 +294,7 @@ app.get("/employee/:empNum", (req, res) => {
 
 
    
-app.get("/employees/delete/:empNum", (req, res) => {
+app.get("/employees/delete/:empNum", ensureLogin,(req, res) => {
     dataService.deleteEmployeeByNum(req.params.empNum).then((data) => {
     res.redirect("/employees");
     }).catch((err) => {
@@ -265,7 +324,9 @@ app.post("/images/add", upload.single("imageFile"), (req, res) => {
 
 
 
- app.get("/images", (req, res) => {
+
+
+ app.get("/images",ensureLogin, (req, res) => {
      fs.readdir("./public/images/uploaded", (err, items) => {
         res.render("images", {images: items});
      });
@@ -321,6 +382,64 @@ app.post("/department/update", (req, res) => {
     );
 });
 
+/*POST /register
+• This "POST" route will invoke the dataServiceAuth.registerUser(userData) method with the POST data (ie:
+req.body).
+o If the promise resolved successfully, render the register view with the following data:
+{successMessage: "User created"}
+o If the promise was rejected (err), render the register view with the following data:
+{errorMessage: err, userName: req.body.userName} - NOTE: we are returning the user back to the
+page, so the user does not forget the user value that was used to attempt to register with the system
+*/
+
+app.post("/register", (req, res) => {
+    dataServiceAuth.registerUser(req.body).then((value)=>{
+        res.render("register", {successMessage: "User created"});
+    }).catch((err)=>{
+        res.render("register", {errorMessage: err, userName: req.body.userName});
+    }); 
+});
+
+
+/*POST /login
+• The User-Agent request header contains a characteristic string that allows the network protocol peers to identify
+the application type, operating system, software vendor or software version of the requesting software user
+agent (MDN). Before we do anything, we must set the value of the client's "User-Agent" to the request body
+6
+property, ie:
+req.body.userAgent = req.get('User-Agent');
+• Next, we must invoke the dataServiceAuth.checkUser(userData) method with the POST data (ie: req.body).
+o If the promise resolved successfully, add the returned user's userName, email & loginHistory to the
+session and redirect the user to the "/employees" view, ie:
+dataServiceAuth.checkUser(req.body).then((user) => {
+ req.session.user = {
+ userName: … // complete it with authenticated user's userName
+ email: … // complete it with authenticated user's email
+ loginHistory: … // complete it with authenticated user's loginHistory
+ }
+ res.redirect('/employees');
+})
+o If the promise was rejected (ie: in the "catch"), render the login view with the following data (where err
+is the parameter of the "catch": {errorMessage: err, userName: req.body.userName} - NOTE: we are
+returning the user back to the login page, so the user does not forget the user value that was used to
+attempt to log into the system*/ 
+
+app.post("/login", (req, res) => {
+    req.body.userAgent = req.get('User-Agent');
+    dataServiceAuth.checkUser(req.body).then((user) => {
+        req.session.user = {
+            userName: user.userName,
+            email: user.email,
+            loginHistory: user.loginHistory
+        }
+        res.redirect('/employees');
+    }).catch((err)=>{
+        res.render("login", {errorMessage: err, userName: req.body.userName});
+    }
+    );
+});
+
+
 
 
 
@@ -334,19 +453,21 @@ app.use(function(req,res){
 
 
 
-dataService.initialize().then(()=>{
-    app.listen(HTTP_PORT,onHttpStart);
-}).catch((err)=>{
-    console.log(err);
+
+
+
+dataService.initialize()
+.then(dataServiceAuth.initialize)
+.then(function(){
+ app.listen(HTTP_PORT, function(){
+ console.log("app listening on: " + HTTP_PORT)
+ });
+}).catch(function(err){
+ console.log("unable to start server: " + err);
 });
 
 
 
-
-
-function onHttpStart() {
-    console.log("Express http server listening on: " + HTTP_PORT);
-}
 
 
 
