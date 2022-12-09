@@ -401,28 +401,7 @@ app.post("/register", (req, res) => {
 });
 
 
-/*POST /login
-• The User-Agent request header contains a characteristic string that allows the network protocol peers to identify
-the application type, operating system, software vendor or software version of the requesting software user
-agent (MDN). Before we do anything, we must set the value of the client's "User-Agent" to the request body
-6
-property, ie:
-req.body.userAgent = req.get('User-Agent');
-• Next, we must invoke the dataServiceAuth.checkUser(userData) method with the POST data (ie: req.body).
-o If the promise resolved successfully, add the returned user's userName, email & loginHistory to the
-session and redirect the user to the "/employees" view, ie:
-dataServiceAuth.checkUser(req.body).then((user) => {
- req.session.user = {
- userName: … // complete it with authenticated user's userName
- email: … // complete it with authenticated user's email
- loginHistory: … // complete it with authenticated user's loginHistory
- }
- res.redirect('/employees');
-})
-o If the promise was rejected (ie: in the "catch"), render the login view with the following data (where err
-is the parameter of the "catch": {errorMessage: err, userName: req.body.userName} - NOTE: we are
-returning the user back to the login page, so the user does not forget the user value that was used to
-attempt to log into the system*/ 
+
 
 app.post("/login", (req, res) => {
     req.body.userAgent = req.get('User-Agent');
@@ -446,10 +425,6 @@ app.post("/login", (req, res) => {
 app.use(function(req,res){
     res.status(404).send("Page Not Found"); 
 });
-
-
-
-
 
 
 
